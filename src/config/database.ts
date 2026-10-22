@@ -5,25 +5,18 @@ import { PRESET_TEMPLATES } from '../templates/presetTemplates.js';
 
 const { Pool } = pg;
 
-// Initialize PostgreSQL Connection Pool
-export const pool = new Pool(
-  ENV.DATABASE_URL
-    ? {
-        connectionString: ENV.DATABASE_URL,
-        ssl: ENV.DB_SSL ? { rejectUnauthorized: false } : false,
-      }
-    : {
-        host: ENV.DB_HOST,
-        port: ENV.DB_PORT,
-        user: ENV.DB_USER,
-        password: ENV.DB_PASSWORD,
-        database: ENV.DB_NAME,
-        ssl: ENV.DB_SSL ? { rejectUnauthorized: false } : false,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
-      }
-);
+// Initialize PostgreSQL Connection Pool using discrete parameters (Tanpa URL)
+export const pool = new Pool({
+  host: ENV.DB_HOST,
+  port: ENV.DB_PORT,
+  user: ENV.DB_USER,
+  password: ENV.DB_PASSWORD,
+  database: ENV.DB_NAME,
+  ssl: ENV.DB_SSL ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
 pool.on('error', (err) => {
   console.error('❌ Unexpected PostgreSQL pool error on idle client:', err);
@@ -150,7 +143,7 @@ export async function getDb(): Promise<pg.Pool> {
     } finally {
       client.release();
     }
-    console.log('🐘 PostgreSQL connected & verified schema successfully in:', ENV.DB_NAME || 'via DATABASE_URL');
+    console.log(`🐘 PostgreSQL connected (No URL - Host: ${ENV.DB_HOST}:${ENV.DB_PORT}, Database: ${ENV.DB_NAME})`);
     return pool;
   } catch (err: any) {
     console.error('❌ Failed to connect to PostgreSQL database:', err.message);
