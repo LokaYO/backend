@@ -12,6 +12,8 @@ router.get('/users', asyncHandler(adminController.getMonitoringUsers));
 router.get('/users/:userId', asyncHandler(adminController.getUserDetails));
 // Operasi Sensitif (Khusus Admin saja)
 router.put('/users/:userId/role', requireAdminOnly, asyncHandler(adminController.updateUserRole));
+router.put('/users/:userId/plan', requireAdminOnly, asyncHandler(adminController.updateUserPlan));
+router.patch('/users/:userId/plan', requireAdminOnly, asyncHandler(adminController.updateUserPlan));
 router.delete('/users/:userId', requireAdminOnly, asyncHandler(adminController.deleteUser));
 // Moderasi Konten & Suspend Website
 router.get('/websites', asyncHandler(adminController.getModerationWebsites));

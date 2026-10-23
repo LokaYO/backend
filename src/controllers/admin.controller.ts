@@ -20,6 +20,12 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
   res.json(result);
 }
 
+export async function updateUserPlan(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { plan, durationDays } = req.body;
+  const result = await adminService.updateUserPlan(req.params.userId, plan, durationDays || 30);
+  res.json(result);
+}
+
 export async function deleteUser(req: AuthenticatedRequest, res: Response): Promise<void> {
   const result = await adminService.deleteUser(req.params.userId);
   res.json(result);

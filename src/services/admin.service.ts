@@ -7,6 +7,8 @@ export async function getAllUsersForMonitoring() {
     name: string;
     email: string;
     role: string;
+    plan: 'free' | 'pro' | null;
+    subscription_until: string | null;
     last_login_at: string | null;
     created_at: string;
     total_websites: string | number;
@@ -20,6 +22,8 @@ export async function getAllUsersForMonitoring() {
       u.name, 
       u.email, 
       u.role, 
+      u.plan,
+      u.subscription_until,
       u.last_login_at, 
       u.created_at,
       COUNT(DISTINCT w.id) AS total_websites,
@@ -39,6 +43,8 @@ export async function getAllUsersForMonitoring() {
     name: u.name,
     email: u.email,
     role: u.role,
+    plan: (u.plan || 'free') as 'free' | 'pro',
+    subscriptionUntil: u.subscription_until,
     lastLoginAt: u.last_login_at,
     createdAt: u.created_at,
     totalWebsites: parseInt(u.total_websites as string, 10) || 0,
@@ -55,9 +61,11 @@ export async function getUserDetailsWithWebsites(userId: string) {
     name: string;
     email: string;
     role: string;
+    plan: string | null;
+    subscription_until: string | null;
     last_login_at: string | null;
     created_at: string;
-  }>('SELECT id, name, email, role, last_login_at, created_at FROM users WHERE id = $1', [userId]);
+  }>('SELECT id, name, email, role, plan, subscription_until, last_login_at, created_at FROM users WHERE id = $1', [userId]);
 
   if (!user) {
     throw { status: 404, message: 'User tidak ditemukan' };
@@ -147,6 +155,50 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'support
 
   await execute('UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newRole, userId]);
   return { success: true, message: `Role user berhasil diubah menjadi ${newRole}` };
+}
+
+export async function updateUserPlan(userId: string, newPlan: 'free' | 'pro', durationDays: number = 30) {
+  if (!['free', 'pro'].includes(newPlan)) {
+    throw { status: 400, message: "Plan harus 'free' atau 'pro'" };
+  }
+
+  const existing = await queryOne<{ id: string; name: string }>('SELECT id, name FROM users WHERE id = $1', [userId]);
+  if (!existing) {
+    throw { status: 404, message: 'User tidak ditemukan' };
+  }
+
+  if (newPlan === 'pro') {
+    // Tambahkan durasi hari untuk langganan PRO
+    await execute(
+      `UPDATE users 
+       SET plan = $1, 
+           subscription_until = GREATEST(COALESCE(subscription_until, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP) + ($2 || ' days')::interval,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $3`,
+      [newPlan, durationDays, userId]
+    );
+  } else {
+    // Reset akun menjadi Free Plan
+    await execute(
+      `UPDATE users 
+       SET plan = 'free', 
+           subscription_until = NULL,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1`,
+      [userId]
+    );
+  }
+
+  await logActivity({
+    userId,
+    action: 'ADMIN_UPDATE_USER_PLAN',
+    details: { targetUserId: userId, newPlan, durationDays },
+  });
+
+  return {
+    success: true,
+    message: `Akses paket untuk user "${existing.name}" berhasil diubah menjadi ${newPlan.toUpperCase()}${newPlan === 'pro' ? ` (+${durationDays} hari)` : ''}`,
+  };
 }
 
 export async function deleteUser(userId: string) {

@@ -14,6 +14,11 @@ export async function updateUserRole(req, res) {
     const result = await adminService.updateUserRole(req.params.userId, role);
     res.json(result);
 }
+export async function updateUserPlan(req, res) {
+    const { plan, durationDays } = req.body;
+    const result = await adminService.updateUserPlan(req.params.userId, plan, durationDays || 30);
+    res.json(result);
+}
 export async function deleteUser(req, res) {
     const result = await adminService.deleteUser(req.params.userId);
     res.json(result);
