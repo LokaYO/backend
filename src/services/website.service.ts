@@ -124,7 +124,18 @@ export async function createWebsite(
   }
 
   const websiteId = `site_${crypto.randomUUID()}`;
-  const slug = await getUniqueSlug(name);
+
+  // Check user plan: Jika free, otomatis tambahkan 4 digit angka acak unik di slug
+  const user = await queryOne<{ plan: string }>('SELECT plan FROM users WHERE id = ?', [userId]);
+  const isPro = user?.plan === 'pro';
+
+  let rawSlugName = name;
+  if (!isPro) {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    rawSlugName = `${name}-${randomSuffix}`;
+  }
+
+  const slug = await getUniqueSlug(rawSlugName);
 
   let chosenBusinessInfo = businessInfo || {
     name,
@@ -191,7 +202,17 @@ export async function updateWebsite(
 
   let finalSlug = slug;
   if (slug) {
-    finalSlug = await getUniqueSlug(slug, websiteId);
+    const user = await queryOne<{ plan: string }>('SELECT plan FROM users WHERE id = ?', [userId]);
+    const isPro = user?.plan === 'pro';
+
+    let candidateSlug = slug;
+    // Jika belum Pro dan slug belum berakhiran 4 digit angka acak, tambahkan suffix
+    if (!isPro && !/-\d{4}$/.test(candidateSlug)) {
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      candidateSlug = `${candidateSlug}-${randomSuffix}`;
+    }
+
+    finalSlug = await getUniqueSlug(candidateSlug, websiteId);
   }
 
   await execute(
@@ -286,7 +307,14 @@ export async function getPublicWebsiteBySlug(slug: string) {
     theme: any;
     created_at: string;
     updated_at: string;
-  }>('SELECT * FROM websites WHERE slug = ?', [slug]);
+    owner_plan?: string;
+  }>(
+    `SELECT w.*, u.plan as owner_plan 
+     FROM websites w 
+     LEFT JOIN users u ON u.id = w.user_id 
+     WHERE w.slug = ?`,
+    [slug]
+  );
 
   if (!website) {
     throw { status: 404, message: 'Halaman landing page tidak ditemukan.' };
@@ -321,6 +349,7 @@ export async function getPublicWebsiteBySlug(slug: string) {
     name: website.name,
     slug: website.slug,
     status: website.status,
+    ownerPlan: website.owner_plan || 'free',
     businessInfo: parseJsonSafe(website.business_info),
     theme: parseJsonSafe(website.theme),
     viewsCount: parseInt((website as any).views_count, 10) || 0,

@@ -6,6 +6,7 @@ import templateRoutes from './template.routes.js';
 import publicRoutes from './public.routes.js';
 import adminRoutes from './admin.routes.js';
 import uploadRoutes from './upload.routes.js';
+import paymentRoutes from './payment.routes.js';
 import { getActiveAnnouncements } from '../services/announcement.service.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 
@@ -31,5 +32,6 @@ apiRouter.use('/templates', templateRoutes);
 apiRouter.use('/public', publicRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/upload', uploadRoutes);
+apiRouter.use('/payments', paymentRoutes);
 
 export default apiRouter;

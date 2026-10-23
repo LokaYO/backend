@@ -74,7 +74,15 @@ export async function createWebsite(userId, data) {
         throw { status: 400, message: 'Nama website wajib diisi' };
     }
     const websiteId = `site_${crypto.randomUUID()}`;
-    const slug = await getUniqueSlug(name);
+    // Check user plan: Jika free, otomatis tambahkan 4 digit angka acak unik di slug
+    const user = await queryOne('SELECT plan FROM users WHERE id = ?', [userId]);
+    const isPro = user?.plan === 'pro';
+    let rawSlugName = name;
+    if (!isPro) {
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        rawSlugName = `${name}-${randomSuffix}`;
+    }
+    const slug = await getUniqueSlug(rawSlugName);
     let chosenBusinessInfo = businessInfo || {
         name,
         category: 'Bisnis Lokal',
@@ -121,7 +129,15 @@ export async function updateWebsite(websiteId, userId, data) {
     }
     let finalSlug = slug;
     if (slug) {
-        finalSlug = await getUniqueSlug(slug, websiteId);
+        const user = await queryOne('SELECT plan FROM users WHERE id = ?', [userId]);
+        const isPro = user?.plan === 'pro';
+        let candidateSlug = slug;
+        // Jika belum Pro dan slug belum berakhiran 4 digit angka acak, tambahkan suffix
+        if (!isPro && !/-\d{4}$/.test(candidateSlug)) {
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            candidateSlug = `${candidateSlug}-${randomSuffix}`;
+        }
+        finalSlug = await getUniqueSlug(candidateSlug, websiteId);
     }
     await execute(`UPDATE websites 
      SET name = COALESCE(?, name),
@@ -181,7 +197,10 @@ export async function unpublishWebsite(websiteId, userId) {
     return { success: true, status: 'draft' };
 }
 export async function getPublicWebsiteBySlug(slug) {
-    const website = await queryOne('SELECT * FROM websites WHERE slug = ?', [slug]);
+    const website = await queryOne(`SELECT w.*, u.plan as owner_plan 
+     FROM websites w 
+     LEFT JOIN users u ON u.id = w.user_id 
+     WHERE w.slug = ?`, [slug]);
     if (!website) {
         throw { status: 404, message: 'Halaman landing page tidak ditemukan.' };
     }
@@ -206,6 +225,7 @@ export async function getPublicWebsiteBySlug(slug) {
         name: website.name,
         slug: website.slug,
         status: website.status,
+        ownerPlan: website.owner_plan || 'free',
         businessInfo: parseJsonSafe(website.business_info),
         theme: parseJsonSafe(website.theme),
         viewsCount: parseInt(website.views_count, 10) || 0,

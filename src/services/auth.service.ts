@@ -51,6 +51,8 @@ export async function registerUser(name: string, email: string, password: string
       name: name.trim(),
       email: normalizedEmail,
       role,
+      plan: 'free',
+      subscriptionUntil: null,
     },
   };
 }
@@ -61,8 +63,16 @@ export async function loginUser(email: string, password: string, clientInfo?: { 
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const user = await queryOne<{ id: string; name: string; email: string; password_hash: string; role: string }>(
-    'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
+  const user = await queryOne<{
+    id: string;
+    name: string;
+    email: string;
+    password_hash: string;
+    role: string;
+    plan?: string;
+    subscription_until?: string | null;
+  }>(
+    'SELECT id, name, email, password_hash, role, plan, subscription_until FROM users WHERE email = $1',
     [normalizedEmail]
   );
 
@@ -108,6 +118,8 @@ export async function loginUser(email: string, password: string, clientInfo?: { 
       name: user.name,
       email: user.email,
       role: user.role || 'user',
+      plan: user.plan || 'free',
+      subscriptionUntil: user.subscription_until || null,
     },
   };
 }
@@ -118,14 +130,25 @@ export async function getUserById(userId: string) {
     name: string;
     email: string;
     role: string;
+    plan: string;
+    subscription_until: string | null;
     created_at: string;
     last_login_at: string;
-  }>('SELECT id, name, email, role, created_at, last_login_at FROM users WHERE id = $1', [userId]);
+  }>('SELECT id, name, email, role, plan, subscription_until, created_at, last_login_at FROM users WHERE id = $1', [userId]);
 
   if (!user) {
     throw { status: 404, message: 'User tidak ditemukan' };
   }
-  return user;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    plan: user.plan || 'free',
+    subscriptionUntil: user.subscription_until,
+    createdAt: user.created_at,
+    lastLoginAt: user.last_login_at,
+  };
 }
 
 export async function logoutUser(token: string) {
