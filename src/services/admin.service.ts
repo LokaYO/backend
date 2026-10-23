@@ -1,4 +1,5 @@
 import { execute, queryAll, queryOne } from '../config/database.js';
+import { logActivity } from './audit.service.js';
 
 export async function getAllUsersForMonitoring() {
   const users = await queryAll<{
@@ -182,4 +183,249 @@ export async function getPlatformStats() {
     totalPublished: parseInt(stats?.total_published || '0', 10),
   };
 }
+
+// ─── Content Moderation & Suspend Website ─────────────────────────────────────
+
+export async function getAllWebsitesForModeration() {
+  const websites = await queryAll<{
+    id: string;
+    user_id: string;
+    owner_name: string;
+    owner_email: string;
+    name: string;
+    slug: string;
+    status: string;
+    template: string | null;
+    suspend_reason: string | null;
+    views_count: number;
+    whatsapp_clicks_count: number;
+    created_at: string;
+    updated_at: string;
+    section_count: string;
+  }>(
+    `SELECT 
+      w.id,
+      w.user_id,
+      u.name AS owner_name,
+      u.email AS owner_email,
+      w.name,
+      w.slug,
+      w.status,
+      w.template,
+      w.suspend_reason,
+      COALESCE(w.views_count, 0) AS views_count,
+      COALESCE(w.whatsapp_clicks_count, 0) AS whatsapp_clicks_count,
+      w.created_at,
+      w.updated_at,
+      (SELECT count(*)::int FROM sections s WHERE s.website_id = w.id) AS section_count
+    FROM websites w
+    JOIN users u ON u.id = w.user_id
+    ORDER BY w.updated_at DESC`
+  );
+
+  return websites.map((w) => ({
+    id: w.id,
+    userId: w.user_id,
+    ownerName: w.owner_name,
+    ownerEmail: w.owner_email,
+    name: w.name,
+    slug: w.slug,
+    status: w.status,
+    template: w.template,
+    suspendReason: w.suspend_reason,
+    viewsCount: w.views_count,
+    whatsappClicksCount: w.whatsapp_clicks_count,
+    createdAt: w.created_at,
+    updatedAt: w.updated_at,
+    sectionCount: parseInt(w.section_count as string, 10) || 0,
+  }));
+}
+
+export async function suspendWebsite(websiteId: string, reason: string, adminId: string) {
+  const existing = await queryOne<{ id: string; name: string; slug: string; status: string }>(
+    'SELECT id, name, slug, status FROM websites WHERE id = $1',
+    [websiteId]
+  );
+
+  if (!existing) {
+    throw { status: 404, message: 'Website tidak ditemukan' };
+  }
+
+  const finalReason = reason && reason.trim() !== '' 
+    ? reason.trim() 
+    : 'Melanggar ketentuan layanan platform LOKA (Konten tidak pantas / spam).';
+
+  await execute(
+    `UPDATE websites 
+     SET status = 'suspended', suspend_reason = $1, updated_at = CURRENT_TIMESTAMP 
+     WHERE id = $2`,
+    [finalReason, websiteId]
+  );
+
+  await logActivity({
+    userId: adminId,
+    action: 'WEBSITE_SUSPEND',
+    details: {
+      websiteId,
+      name: existing.name,
+      slug: existing.slug,
+      reason: finalReason,
+    },
+  });
+
+  return {
+    success: true,
+    message: `Website "${existing.name}" berhasil ditangguhkan (suspended).`,
+    suspendReason: finalReason,
+  };
+}
+
+export async function unsuspendWebsite(websiteId: string, adminId: string) {
+  const existing = await queryOne<{ id: string; name: string; slug: string; status: string }>(
+    'SELECT id, name, slug, status FROM websites WHERE id = $1',
+    [websiteId]
+  );
+
+  if (!existing) {
+    throw { status: 404, message: 'Website tidak ditemukan' };
+  }
+
+  // Restore to draft so owner can review before publishing again
+  await execute(
+    `UPDATE websites 
+     SET status = 'draft', suspend_reason = NULL, updated_at = CURRENT_TIMESTAMP 
+     WHERE id = $1`,
+    [websiteId]
+  );
+
+  await logActivity({
+    userId: adminId,
+    action: 'WEBSITE_UNSUSPEND',
+    details: {
+      websiteId,
+      name: existing.name,
+      slug: existing.slug,
+    },
+  });
+
+  return {
+    success: true,
+    message: `Penangguhan website "${existing.name}" telah dicabut. Status dikembalikan ke Draft.`,
+  };
+}
+
+// ─── Data Export (CSV Excel-Compatible with UTF-8 BOM) ─────────────────────────
+
+function escapeCsvField(field: any): string {
+  if (field === null || field === undefined) return '""';
+  const str = String(field).replace(/"/g, '""');
+  return `"${str}"`;
+}
+
+export async function generateUsersCsv(): Promise<string> {
+  const users = await getAllUsersForMonitoring();
+  const headers = [
+    'ID Pengguna',
+    'Nama Lengkap',
+    'Email Akun',
+    'Role Akses',
+    'Status Online',
+    'Total Website Dibuat',
+    'Website Berstatus Live',
+    'Terakhir Login',
+    'Perangkat Terakhir',
+    'IP Address Terakhir',
+    'Tanggal Registrasi',
+  ];
+
+  const rows = users.map((u) => [
+    escapeCsvField(u.id),
+    escapeCsvField(u.name),
+    escapeCsvField(u.email),
+    escapeCsvField(u.role),
+    escapeCsvField(u.isCurrentlyOnline ? 'Online' : 'Offline'),
+    escapeCsvField(u.totalWebsites),
+    escapeCsvField(u.publishedWebsites),
+    escapeCsvField(u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('id-ID') : 'Belum Pernah'),
+    escapeCsvField(u.lastDeviceInfo || '-'),
+    escapeCsvField(u.lastIpAddress || '-'),
+    escapeCsvField(new Date(u.createdAt).toLocaleString('id-ID')),
+  ]);
+
+  // UTF-8 BOM (\uFEFF) ensures Excel opens Indonesian characters cleanly
+  return '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
+export async function generateWebsitesCsv(): Promise<string> {
+  const websites = await getAllWebsitesForModeration();
+  const headers = [
+    'ID Website',
+    'Nama Website',
+    'Slug / URL',
+    'Status',
+    'Alasan Suspend',
+    'Nama Pemilik',
+    'Email Pemilik',
+    'Template Pilihan',
+    'Jumlah Seksi Konten',
+    'Total Pengunjung (Views)',
+    'Total Klik WhatsApp',
+    'Tanggal Dibuat',
+    'Terakhir Diperbarui',
+  ];
+
+  const rows = websites.map((w) => [
+    escapeCsvField(w.id),
+    escapeCsvField(w.name),
+    escapeCsvField(w.slug),
+    escapeCsvField(w.status.toUpperCase()),
+    escapeCsvField(w.suspendReason || '-'),
+    escapeCsvField(w.ownerName),
+    escapeCsvField(w.ownerEmail),
+    escapeCsvField(w.template || 'Custom'),
+    escapeCsvField(w.sectionCount),
+    escapeCsvField(w.viewsCount),
+    escapeCsvField(w.whatsappClicksCount),
+    escapeCsvField(new Date(w.createdAt).toLocaleString('id-ID')),
+    escapeCsvField(new Date(w.updatedAt).toLocaleString('id-ID')),
+  ]);
+
+  return '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
+export async function generateAnalyticsCsv(): Promise<string> {
+  const websites = await getAllWebsitesForModeration();
+  const headers = [
+    'Nama Bisnis / Website',
+    'Pemilik Usaha',
+    'URL Publik',
+    'Status Website',
+    'Total Kunjungan (Pageviews)',
+    'Interaksi WhatsApp (Clicks)',
+    'Conversion Rate (CTR %)',
+    'Keterangan Performa',
+  ];
+
+  const rows = websites.map((w) => {
+    const ctr = w.viewsCount > 0 ? ((w.whatsappClicksCount / w.viewsCount) * 100).toFixed(1) : '0.0';
+    let performance = 'Baru Dibuat';
+    if (w.viewsCount > 50) {
+      performance = parseFloat(ctr) > 10 ? 'Sangat Tinggi (High Intent)' : 'Aktif';
+    }
+
+    return [
+      escapeCsvField(w.name),
+      escapeCsvField(`${w.ownerName} (${w.ownerEmail})`),
+      escapeCsvField(`https://loka.my.id/s/${w.slug}`),
+      escapeCsvField(w.status.toUpperCase()),
+      escapeCsvField(w.viewsCount),
+      escapeCsvField(w.whatsappClicksCount),
+      escapeCsvField(`${ctr}%`),
+      escapeCsvField(performance),
+    ];
+  });
+
+  return '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
 

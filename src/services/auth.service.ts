@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { execute, hashPassword, queryOne } from '../config/database.js';
 import { signToken } from '../utils/jwt.js';
+import { logActivity } from './audit.service.js';
 
 export async function registerUser(name: string, email: string, password: string, role = 'user') {
   if (!name || !email || !password) {
@@ -36,6 +37,12 @@ export async function registerUser(name: string, email: string, password: string
   // Catat session untuk pemantauan sesi aktif
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   await execute('INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [token, userId, expiresAt]);
+
+  await logActivity({
+    userId,
+    action: 'USER_REGISTER',
+    details: { name: name.trim(), email: normalizedEmail, role },
+  });
 
   return {
     token,
@@ -85,6 +92,14 @@ export async function loginUser(email: string, password: string, clientInfo?: { 
     'INSERT INTO sessions (token, user_id, ip_address, user_agent, expires_at) VALUES ($1, $2, $3, $4, $5)',
     [token, user.id, clientInfo?.ip || null, clientInfo?.userAgent || null, expiresAt]
   );
+
+  await logActivity({
+    userId: user.id,
+    action: 'USER_LOGIN',
+    details: { email: user.email, role: user.role },
+    ipAddress: clientInfo?.ip || null,
+    userAgent: clientInfo?.userAgent || null,
+  });
 
   return {
     token,

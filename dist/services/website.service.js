@@ -2,6 +2,7 @@ import crypto, { randomUUID } from 'node:crypto';
 import { execute, queryAll, queryOne } from '../config/database.js';
 import { getUniqueSlug } from '../utils/slugify.js';
 import { PRESET_TEMPLATES } from '../templates/presetTemplates.js';
+import { logActivity } from './audit.service.js';
 function parseJsonSafe(val, fallback = {}) {
     if (!val)
         return fallback;
@@ -105,6 +106,11 @@ export async function createWebsite(userId, data) {
         const sectionId = `sec_${crypto.randomUUID()}`;
         await execute('INSERT INTO sections (id, website_id, type, content, position) VALUES (?, ?, ?, ?, ?)', [sectionId, websiteId, s.type, JSON.stringify(s.content), i]);
     }
+    await logActivity({
+        userId,
+        action: 'WEBSITE_CREATE',
+        details: { websiteId, name, slug },
+    });
     return { websiteId, slug };
 }
 export async function updateWebsite(websiteId, userId, data) {
@@ -143,25 +149,35 @@ export async function deleteWebsite(websiteId, userId) {
     return { success: true, message: 'Website berhasil dihapus' };
 }
 export async function publishWebsite(websiteId, userId) {
-    const website = await queryOne('SELECT slug FROM websites WHERE id = ? AND user_id = ?', [
-        websiteId,
-        userId,
-    ]);
+    const website = await queryOne('SELECT slug, status, name FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
     if (!website) {
         throw { status: 404, message: 'Website tidak ditemukan' };
     }
+    if (website.status === 'suspended') {
+        throw {
+            status: 403,
+            message: 'Website ini telah ditangguhkan oleh Administrator. Silakan hubungi tim support untuk pemulihan.',
+        };
+    }
     await execute("UPDATE websites SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
+    await logActivity({
+        userId,
+        action: 'WEBSITE_PUBLISH',
+        details: { websiteId, slug: website.slug, name: website.name },
+    });
     return { success: true, status: 'published', slug: website.slug };
 }
 export async function unpublishWebsite(websiteId, userId) {
-    const website = await queryOne('SELECT slug FROM websites WHERE id = ? AND user_id = ?', [
-        websiteId,
-        userId,
-    ]);
+    const website = await queryOne('SELECT slug, name FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
     if (!website) {
         throw { status: 404, message: 'Website tidak ditemukan' };
     }
     await execute("UPDATE websites SET status = 'draft', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
+    await logActivity({
+        userId,
+        action: 'WEBSITE_UNPUBLISH',
+        details: { websiteId, slug: website.slug, name: website.name },
+    });
     return { success: true, status: 'draft' };
 }
 export async function getPublicWebsiteBySlug(slug) {
@@ -170,6 +186,14 @@ export async function getPublicWebsiteBySlug(slug) {
         throw { status: 404, message: 'Halaman landing page tidak ditemukan.' };
     }
     if (website.status !== 'published') {
+        if (website.status === 'suspended') {
+            throw {
+                status: 403,
+                message: 'Website ini telah ditangguhkan (suspended) oleh Administrator karena melanggar ketentuan layanan.',
+                isSuspended: true,
+                suspendReason: website.suspend_reason || 'Melanggar ketentuan layanan platform LOKA.',
+            };
+        }
         throw {
             status: 403,
             message: 'Website ini belum dipublikasikan oleh pemiliknya (Masih berstatus Draft).',
