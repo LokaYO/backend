@@ -37,3 +37,23 @@ export async function unpublishWebsite(req: AuthenticatedRequest, res: Response)
   res.json(result);
 }
 
+export async function duplicateWebsite(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const result = await websiteService.duplicateWebsite(req.params.id, req.userId!);
+  res.json(result);
+}
+
+export async function getWebsiteLeads(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const leads = await websiteService.getWebsiteLeads(req.params.id, req.userId!);
+  res.json({ leads });
+}
+
+export async function markLeadRead(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const result = await websiteService.markLeadRead(req.params.id, req.params.leadId, req.userId!);
+  res.json(result);
+}
+
+export async function deleteLead(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const result = await websiteService.deleteLead(req.params.id, req.params.leadId, req.userId!);
+  res.json(result);
+}
+

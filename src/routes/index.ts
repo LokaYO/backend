@@ -5,6 +5,7 @@ import aiRoutes from './ai.routes.js';
 import templateRoutes from './template.routes.js';
 import publicRoutes from './public.routes.js';
 import adminRoutes from './admin.routes.js';
+import uploadRoutes from './upload.routes.js';
 
 const apiRouter = Router();
 
@@ -18,5 +19,6 @@ apiRouter.use('/ai', aiRoutes);
 apiRouter.use('/templates', templateRoutes);
 apiRouter.use('/public', publicRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/upload', uploadRoutes);
 
 export default apiRouter;

@@ -47,3 +47,25 @@ export async function resolvePublicSite(req: Request, res: Response): Promise<vo
   const website = await websiteService.getPublicWebsiteBySlug(slugCandidate);
   res.json({ website, resolvedSlug: slugCandidate, host: cleanHost });
 }
+
+export async function trackPublicEvent(req: Request, res: Response): Promise<void> {
+  const { slug } = req.params;
+  const { type } = req.body;
+  if (!type || !['view', 'whatsapp_click'].includes(type)) {
+    res.status(400).json({ error: "Tipe event tracking harus 'view' atau 'whatsapp_click'." });
+    return;
+  }
+  const result = await websiteService.trackPublicWebsiteEvent(slug, type);
+  res.json(result);
+}
+
+export async function submitLead(req: Request, res: Response): Promise<void> {
+  const { slug } = req.params;
+  const { name, phone, message, serviceInterest } = req.body;
+  if (!name || !phone || !message) {
+    res.status(400).json({ error: 'Nama, nomor WhatsApp/telepon, dan pesan wajib diisi.' });
+    return;
+  }
+  const result = await websiteService.createLead(slug, { name, phone, message, serviceInterest });
+  res.json(result);
+}

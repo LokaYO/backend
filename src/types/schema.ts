@@ -23,12 +23,31 @@ export interface BusinessInfo {
   services?: string;
   targetCustomer?: string;
   preferredStyle?: 'modern' | 'minimalist' | 'warm' | 'bold' | 'elegant';
+  operatingHours?: string;
+  openTime?: string;
+  closeTime?: string;
+  whatsappMessageTemplate?: string;
+  enableFloatingWhatsapp?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+  ogImageUrl?: string;
+}
+
+export interface Lead {
+  id: string;
+  websiteId: string;
+  name: string;
+  phone: string;
+  message: string;
+  serviceInterest?: string;
+  status: 'unread' | 'read';
+  createdAt: string;
 }
 
 export interface ThemeConfig {
   primaryColor: string;
   secondaryColor: string;
-  font: 'sans' | 'serif' | 'display';
+  font: 'sans' | 'serif' | 'display' | 'poppins' | 'oswald' | 'lora' | 'montserrat' | 'cinzel' | 'inter' | string;
   accentColor?: string;
   backgroundColor?: string;
 }
@@ -214,7 +233,7 @@ export const BusinessInfoSchema = z.object({
 export const ThemeConfigSchema = z.object({
   primaryColor: z.string().default('#2563eb'),
   secondaryColor: z.string().default('#0f172a'),
-  font: z.enum(['sans', 'serif', 'display']).default('sans'),
+  font: z.string().default('sans'),
   accentColor: z.string().optional(),
   backgroundColor: z.string().optional(),
 });

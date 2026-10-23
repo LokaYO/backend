@@ -14,6 +14,12 @@ router.put('/:id', requireAuth, requireClientOnly, asyncHandler(websiteControlle
 router.delete('/:id', requireAuth, requireClientOnly, asyncHandler(websiteController.deleteWebsite));
 router.post('/:id/publish', requireAuth, requireClientOnly, asyncHandler(websiteController.publishWebsite));
 router.post('/:id/unpublish', requireAuth, requireClientOnly, asyncHandler(websiteController.unpublishWebsite));
+router.post('/:id/duplicate', requireAuth, requireClientOnly, asyncHandler(websiteController.duplicateWebsite));
+
+// Website Leads / Buku Tamu (Client Only)
+router.get('/:id/leads', requireAuth, asyncHandler(websiteController.getWebsiteLeads));
+router.patch('/:id/leads/:leadId/read', requireAuth, requireClientOnly, asyncHandler(websiteController.markLeadRead));
+router.delete('/:id/leads/:leadId', requireAuth, requireClientOnly, asyncHandler(websiteController.deleteLead));
 
 // Website Sections (Khusus client pengguna 'user')
 router.post('/:id/sections', requireAuth, requireClientOnly, asyncHandler(sectionController.addSection));

@@ -7,7 +7,13 @@ const router = Router();
 // 1. Resolve melalui path slug: /api/public/sites/:slug
 router.get('/sites/:slug', asyncHandler(publicController.getPublicSite));
 
-// 2. Resolve melalui Wildcard Subdomain Host (misal: kopi-senja.lokalsite.id -> slug "kopi-senja")
+// 2. Track event analitik publik (view & whatsapp_click)
+router.post('/sites/:slug/track', asyncHandler(publicController.trackPublicEvent));
+
+// 3. Form kontak / Buku Tamu Publik
+router.post('/sites/:slug/leads', asyncHandler(publicController.submitLead));
+
+// 4. Resolve melalui Wildcard Subdomain Host (misal: kopi-senja.lokalsite.id -> slug "kopi-senja")
 router.get('/resolve', asyncHandler(publicController.resolvePublicSite));
 
 export default router;
