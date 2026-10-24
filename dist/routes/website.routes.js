@@ -14,6 +14,7 @@ router.post('/:id/publish', requireAuth, requireClientOnly, asyncHandler(website
 router.post('/:id/unpublish', requireAuth, requireClientOnly, asyncHandler(websiteController.unpublishWebsite));
 router.post('/:id/duplicate', requireAuth, requireClientOnly, asyncHandler(websiteController.duplicateWebsite));
 // Website Leads / Buku Tamu (Client Only)
+router.get('/user/all-leads', requireAuth, asyncHandler(websiteController.getAllUserLeads));
 router.get('/:id/leads', requireAuth, asyncHandler(websiteController.getWebsiteLeads));
 router.patch('/:id/leads/:leadId/read', requireAuth, requireClientOnly, asyncHandler(websiteController.markLeadRead));
 router.delete('/:id/leads/:leadId', requireAuth, requireClientOnly, asyncHandler(websiteController.deleteLead));

@@ -35,6 +35,10 @@ export async function getWebsiteLeads(req, res) {
     const leads = await websiteService.getWebsiteLeads(req.params.id, req.userId);
     res.json({ leads });
 }
+export async function getAllUserLeads(req, res) {
+    const leads = await websiteService.getAllUserLeads(req.userId);
+    res.json({ leads });
+}
 export async function markLeadRead(req, res) {
     const result = await websiteService.markLeadRead(req.params.id, req.params.leadId, req.userId);
     res.json(result);

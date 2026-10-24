@@ -244,6 +244,7 @@ export async function getAllWebsitesForModeration() {
     user_id: string;
     owner_name: string;
     owner_email: string;
+    owner_plan: string | null;
     name: string;
     slug: string;
     status: string;
@@ -260,6 +261,7 @@ export async function getAllWebsitesForModeration() {
       w.user_id,
       u.name AS owner_name,
       u.email AS owner_email,
+      COALESCE(u.plan, 'free') AS owner_plan,
       w.name,
       w.slug,
       w.status,
@@ -280,6 +282,7 @@ export async function getAllWebsitesForModeration() {
     userId: w.user_id,
     ownerName: w.owner_name,
     ownerEmail: w.owner_email,
+    ownerPlan: (w.owner_plan as 'free' | 'pro') || 'free',
     name: w.name,
     slug: w.slug,
     status: w.status,

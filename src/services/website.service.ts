@@ -126,8 +126,8 @@ export async function createWebsite(
   const websiteId = `site_${crypto.randomUUID()}`;
 
   // Check user plan: Jika free, otomatis tambahkan 4 digit angka acak unik di slug
-  const user = await queryOne<{ plan: string }>('SELECT plan FROM users WHERE id = ?', [userId]);
-  const isPro = user?.plan === 'pro';
+  const user = await queryOne<{ plan: string; role?: string }>('SELECT plan, role FROM users WHERE id = ?', [userId]);
+  const isPro = user?.plan === 'pro' || user?.role === 'admin';
 
   let rawSlugName = name;
   if (!isPro) {
@@ -156,6 +156,12 @@ export async function createWebsite(
   if (templateId) {
     const template = PRESET_TEMPLATES.find((t) => t.id === templateId);
     if (template) {
+      if (template.isPro && !isPro) {
+        throw {
+          status: 403,
+          message: `Template "${template.name}" merupakan template eksklusif LOKA PRO. Silakan upgrade paket akun Anda untuk menggunakan template ini.`,
+        };
+      }
       chosenBusinessInfo = template.businessInfo;
       chosenTheme = template.theme;
       initialSections = template.sections;
@@ -484,6 +490,51 @@ export async function getWebsiteLeads(websiteId: string, userId: string) {
   return leads.map((l) => ({
     id: l.id,
     websiteId: l.website_id,
+    name: l.name,
+    phone: l.phone,
+    message: l.message,
+    serviceInterest: l.service_interest || undefined,
+    status: l.status,
+    createdAt: l.created_at,
+  }));
+}
+
+export async function getAllUserLeads(userId: string) {
+  const leads = await queryAll<{
+    id: string;
+    website_id: string;
+    website_name: string;
+    website_slug: string;
+    name: string;
+    phone: string;
+    message: string;
+    service_interest: string | null;
+    status: 'unread' | 'read';
+    created_at: string;
+  }>(
+    `SELECT 
+      l.id,
+      l.website_id,
+      w.name AS website_name,
+      w.slug AS website_slug,
+      l.name,
+      l.phone,
+      l.message,
+      l.service_interest,
+      l.status,
+      l.created_at
+    FROM leads l
+    JOIN websites w ON w.id = l.website_id
+    WHERE w.user_id = ?
+    ORDER BY l.created_at DESC`,
+    [userId]
+  );
+
+  return leads.map((l) => ({
+    id: l.id,
+    websiteId: l.website_id,
+    websiteName: l.website_name,
+    websiteSlug: l.website_slug,
     name: l.name,
     phone: l.phone,
     message: l.message,
