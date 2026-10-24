@@ -58,12 +58,19 @@ if (ENV.REDIS_ENABLED) {
 }
 
 /**
+ * Cek apakah koneksi Redis sedang siap dan aktif menerima command
+ */
+export function isRedisReady(): boolean {
+  return redisClient !== null && isRedisConnected && redisClient.status === 'ready';
+}
+
+/**
  * Mendapatkan nilai dari cache Redis
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  if (!redisClient || !isRedisConnected) return null;
+  if (!isRedisReady()) return null;
   try {
-    const data = await redisClient.get(key);
+    const data = await redisClient!.get(key);
     if (!data) return null;
     return JSON.parse(data) as T;
   } catch {
@@ -76,10 +83,10 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
  * Default TTL: 300 detik (5 menit)
  */
 export async function cacheSet(key: string, value: any, ttlSeconds: number = 300): Promise<void> {
-  if (!redisClient || !isRedisConnected) return;
+  if (!isRedisReady()) return;
   try {
     const serialized = JSON.stringify(value);
-    await redisClient.set(key, serialized, 'EX', ttlSeconds);
+    await redisClient!.set(key, serialized, 'EX', ttlSeconds);
   } catch {
     // Fail silently so database operations proceed smoothly
   }
@@ -89,9 +96,9 @@ export async function cacheSet(key: string, value: any, ttlSeconds: number = 300
  * Menghapus cache berdasarkan key spesifik
  */
 export async function cacheDel(key: string): Promise<void> {
-  if (!redisClient || !isRedisConnected) return;
+  if (!isRedisReady()) return;
   try {
-    await redisClient.del(key);
+    await redisClient!.del(key);
   } catch {
     // Fail silently
   }
@@ -101,11 +108,11 @@ export async function cacheDel(key: string): Promise<void> {
  * Menghapus kumpulan cache berdasarkan pattern (misal: 'site:*')
  */
 export async function cacheDelPattern(pattern: string): Promise<void> {
-  if (!redisClient || !isRedisConnected) return;
+  if (!isRedisReady()) return;
   try {
-    const keys = await redisClient.keys(pattern);
+    const keys = await redisClient!.keys(pattern);
     if (keys && keys.length > 0) {
-      await redisClient.del(...keys);
+      await redisClient!.del(...keys);
     }
   } catch {
     // Fail silently
@@ -116,9 +123,9 @@ export async function cacheDelPattern(pattern: string): Promise<void> {
  * Atomic Increment (Sangat cepat untuk views & clicks counter)
  */
 export async function cacheIncr(key: string): Promise<number | null> {
-  if (!redisClient || !isRedisConnected) return null;
+  if (!isRedisReady()) return null;
   try {
-    return await redisClient.incr(key);
+    return await redisClient!.incr(key);
   } catch {
     return null;
   }

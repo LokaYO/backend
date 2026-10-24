@@ -1,24 +1,100 @@
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, MemoryStore } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import { redisClient } from '../config/redis.js';
+import { redisClient, isRedisReady } from '../config/redis.js';
 /**
- * Helper to generate RedisStore if Redis is connected,
- * otherwise falls back to Express Rate Limit's default In-Memory store.
+ * Smart Adaptive Store
+ * - Gunakan RedisStore jika Redis terhubung dan siap (mode Production / Docker).
+ * - Otomatis fallback ke in-memory store jika Redis offline / tidak aktif (mode Local Dev / Windows).
+ * - Tidak akan pernah melempar 'Stream isn't writeable' atau crash ke route handler.
  */
-function getRateLimitStore(prefix) {
-    if (redisClient) {
-        try {
-            return new RedisStore({
-                // @ts-ignore ioredis call signature compatibility
-                sendCommand: (...args) => redisClient.call(...args),
-                prefix: `loka:rl:${prefix}:`,
-            });
-        }
-        catch {
-            return undefined;
-        }
+class AdaptiveRateLimitStore {
+    memoryStore;
+    redisStore;
+    prefix;
+    options;
+    constructor(prefix) {
+        this.prefix = prefix;
+        this.memoryStore = new MemoryStore();
     }
-    return undefined;
+    init(options) {
+        this.options = options;
+        this.memoryStore.init(options);
+    }
+    getRedisStore() {
+        if (!isRedisReady()) {
+            return null;
+        }
+        if (!this.redisStore) {
+            try {
+                this.redisStore = new RedisStore({
+                    // @ts-ignore ioredis call signature compatibility
+                    sendCommand: async (...args) => {
+                        if (!isRedisReady()) {
+                            throw new Error('Redis is not ready');
+                        }
+                        return await redisClient.call(...args);
+                    },
+                    prefix: `loka:rl:${this.prefix}:`,
+                });
+                if (this.options && typeof this.redisStore.init === 'function') {
+                    this.redisStore.init(this.options);
+                }
+            }
+            catch {
+                this.redisStore = undefined;
+                return null;
+            }
+        }
+        return this.redisStore;
+    }
+    async increment(key) {
+        const rStore = this.getRedisStore();
+        if (rStore) {
+            try {
+                return await rStore.increment(key);
+            }
+            catch {
+                return await this.memoryStore.increment(key);
+            }
+        }
+        return await this.memoryStore.increment(key);
+    }
+    async decrement(key) {
+        const rStore = this.getRedisStore();
+        if (rStore) {
+            try {
+                return await rStore.decrement(key);
+            }
+            catch {
+                return await this.memoryStore.decrement(key);
+            }
+        }
+        return await this.memoryStore.decrement(key);
+    }
+    async resetKey(key) {
+        const rStore = this.getRedisStore();
+        if (rStore) {
+            try {
+                return await rStore.resetKey(key);
+            }
+            catch {
+                return await this.memoryStore.resetKey(key);
+            }
+        }
+        return await this.memoryStore.resetKey(key);
+    }
+    async get(key) {
+        const rStore = this.getRedisStore();
+        if (rStore && typeof rStore.get === 'function') {
+            try {
+                return await rStore.get(key);
+            }
+            catch {
+                return await this.memoryStore.get(key);
+            }
+        }
+        return await this.memoryStore.get(key);
+    }
 }
 /**
  * 1. Global API Rate Limiter
@@ -29,7 +105,8 @@ export const globalApiLimiter = rateLimit({
     limit: 300,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    store: getRateLimitStore('global'),
+    passOnStoreError: true,
+    store: new AdaptiveRateLimitStore('global'),
     message: {
         success: false,
         message: 'Terlalu banyak permintaan dari perangkat Anda. Silakan coba kembali dalam 15 menit.',
@@ -44,7 +121,8 @@ export const authLimiter = rateLimit({
     limit: 10,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    store: getRateLimitStore('auth'),
+    passOnStoreError: true,
+    store: new AdaptiveRateLimitStore('auth'),
     message: {
         success: false,
         message: 'Terlalu banyak percobaan login/registrasi gagal. Demi keamanan akun, coba lagi setelah 15 menit.',
@@ -59,7 +137,8 @@ export const aiLimiter = rateLimit({
     limit: 6,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    store: getRateLimitStore('ai'),
+    passOnStoreError: true,
+    store: new AdaptiveRateLimitStore('ai'),
     message: {
         success: false,
         message: 'Batas pembuatan website dengan AI tercapai (maksimal 6x per 10 menit). Silakan istirahat sejenak.',
@@ -74,7 +153,8 @@ export const leadSubmissionLimiter = rateLimit({
     limit: 10,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    store: getRateLimitStore('leads'),
+    passOnStoreError: true,
+    store: new AdaptiveRateLimitStore('leads'),
     message: {
         success: false,
         message: 'Pesan Anda sudah kami terima sebelumnya. Mohon tunggu beberapa menit sebelum mengirim pesan baru.',

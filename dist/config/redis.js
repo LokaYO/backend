@@ -51,10 +51,16 @@ if (ENV.REDIS_ENABLED) {
     }
 }
 /**
+ * Cek apakah koneksi Redis sedang siap dan aktif menerima command
+ */
+export function isRedisReady() {
+    return redisClient !== null && isRedisConnected && redisClient.status === 'ready';
+}
+/**
  * Mendapatkan nilai dari cache Redis
  */
 export async function cacheGet(key) {
-    if (!redisClient || !isRedisConnected)
+    if (!isRedisReady())
         return null;
     try {
         const data = await redisClient.get(key);
@@ -71,7 +77,7 @@ export async function cacheGet(key) {
  * Default TTL: 300 detik (5 menit)
  */
 export async function cacheSet(key, value, ttlSeconds = 300) {
-    if (!redisClient || !isRedisConnected)
+    if (!isRedisReady())
         return;
     try {
         const serialized = JSON.stringify(value);
@@ -85,7 +91,7 @@ export async function cacheSet(key, value, ttlSeconds = 300) {
  * Menghapus cache berdasarkan key spesifik
  */
 export async function cacheDel(key) {
-    if (!redisClient || !isRedisConnected)
+    if (!isRedisReady())
         return;
     try {
         await redisClient.del(key);
@@ -98,7 +104,7 @@ export async function cacheDel(key) {
  * Menghapus kumpulan cache berdasarkan pattern (misal: 'site:*')
  */
 export async function cacheDelPattern(pattern) {
-    if (!redisClient || !isRedisConnected)
+    if (!isRedisReady())
         return;
     try {
         const keys = await redisClient.keys(pattern);
@@ -114,7 +120,7 @@ export async function cacheDelPattern(pattern) {
  * Atomic Increment (Sangat cepat untuk views & clicks counter)
  */
 export async function cacheIncr(key) {
-    if (!redisClient || !isRedisConnected)
+    if (!isRedisReady())
         return null;
     try {
         return await redisClient.incr(key);
