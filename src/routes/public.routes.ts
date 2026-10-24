@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middlewares/error.middleware.js';
+import { leadSubmissionLimiter } from '../middlewares/rateLimit.middleware.js';
 import * as publicController from '../controllers/public.controller.js';
 
 const router = Router();
@@ -10,8 +11,8 @@ router.get('/sites/:slug', asyncHandler(publicController.getPublicSite));
 // 2. Track event analitik publik (view & whatsapp_click)
 router.post('/sites/:slug/track', asyncHandler(publicController.trackPublicEvent));
 
-// 3. Form kontak / Buku Tamu Publik
-router.post('/sites/:slug/leads', asyncHandler(publicController.submitLead));
+// 3. Form kontak / Buku Tamu Publik (Dilindungi Rate Limit Anti-Spam)
+router.post('/sites/:slug/leads', leadSubmissionLimiter, asyncHandler(publicController.submitLead));
 
 // 4. Resolve melalui Wildcard Subdomain Host (misal: kopi-senja.lokalsite.id -> slug "kopi-senja")
 router.get('/resolve', asyncHandler(publicController.resolvePublicSite));

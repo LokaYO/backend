@@ -9,6 +9,7 @@ import uploadRoutes from './upload.routes.js';
 import paymentRoutes from './payment.routes.js';
 import { getActiveAnnouncements } from '../services/announcement.service.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
+import { authLimiter, aiLimiter } from '../middlewares/rateLimit.middleware.js';
 const apiRouter = Router();
 apiRouter.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -18,9 +19,9 @@ apiRouter.get('/announcements/active', asyncHandler(async (_req, res) => {
     const announcements = await getActiveAnnouncements();
     res.json({ announcements });
 }));
-apiRouter.use('/auth', authRoutes);
+apiRouter.use('/auth', authLimiter, authRoutes);
 apiRouter.use('/websites', websiteRoutes);
-apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/ai', aiLimiter, aiRoutes);
 apiRouter.use('/templates', templateRoutes);
 apiRouter.use('/public', publicRoutes);
 apiRouter.use('/admin', adminRoutes);

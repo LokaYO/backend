@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ENV } from './config/env.js';
 import apiRouter from './routes/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import { globalApiLimiter } from './middlewares/rateLimit.middleware.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadDir = path.resolve(__dirname, '../public/uploads');
@@ -20,6 +21,8 @@ export function createApp() {
     app.use(express.json({ limit: '10mb' }));
     // Static files for uploads (Direct Image Serving)
     app.use('/uploads', express.static(uploadDir));
+    // Global Rate Limiting for all API Endpoints
+    app.use('/api', globalApiLimiter);
     // Root Welcome Route
     app.get('/', (_req, res) => {
         res.json({

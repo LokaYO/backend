@@ -9,6 +9,7 @@ import uploadRoutes from './upload.routes.js';
 import paymentRoutes from './payment.routes.js';
 import { getActiveAnnouncements } from '../services/announcement.service.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
+import { authLimiter, aiLimiter } from '../middlewares/rateLimit.middleware.js';
 
 const apiRouter = Router();
 
@@ -25,9 +26,9 @@ apiRouter.get(
   })
 );
 
-apiRouter.use('/auth', authRoutes);
+apiRouter.use('/auth', authLimiter, authRoutes);
 apiRouter.use('/websites', websiteRoutes);
-apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/ai', aiLimiter, aiRoutes);
 apiRouter.use('/templates', templateRoutes);
 apiRouter.use('/public', publicRoutes);
 apiRouter.use('/admin', adminRoutes);
