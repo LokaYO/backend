@@ -3,6 +3,7 @@ import { execute, queryAll, queryOne } from '../config/database.js';
 import { getUniqueSlug } from '../utils/slugify.js';
 import { PRESET_TEMPLATES } from '../templates/presetTemplates.js';
 import { logActivity } from './audit.service.js';
+import { cacheGet, cacheSet, cacheDel, cacheDelPattern } from '../config/redis.js';
 
 function parseJsonSafe(val: any, fallback: any = {}) {
   if (!val) return fallback;
@@ -239,17 +240,28 @@ export async function updateWebsite(
     ]
   );
 
+  // Invalidate Redis Cache
+  if (finalSlug) {
+    await cacheDel(`site:public:${finalSlug}`);
+  }
+  await cacheDelPattern(`site:public:*`);
+
   return { success: true, message: 'Website berhasil diperbarui', slug: finalSlug };
 }
 
 export async function deleteWebsite(websiteId: string, userId: string) {
-  const existing = await queryOne('SELECT id FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
+  const existing = await queryOne<{ id: string; slug: string }>('SELECT id, slug FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
   if (!existing) {
     throw { status: 404, message: 'Website tidak ditemukan' };
   }
 
   await execute('DELETE FROM sections WHERE website_id = ?', [websiteId]);
   await execute('DELETE FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
+
+  // Invalidate Redis Cache
+  if (existing.slug) {
+    await cacheDel(`site:public:${existing.slug}`);
+  }
 
   return { success: true, message: 'Website berhasil dihapus' };
 }
@@ -272,6 +284,9 @@ export async function publishWebsite(websiteId: string, userId: string) {
 
   await execute("UPDATE websites SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
   
+  // Invalidate Redis Cache so latest published version is served
+  await cacheDel(`site:public:${website.slug}`);
+
   await logActivity({
     userId,
     action: 'WEBSITE_PUBLISH',
@@ -292,6 +307,9 @@ export async function unpublishWebsite(websiteId: string, userId: string) {
 
   await execute("UPDATE websites SET status = 'draft', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
 
+  // Invalidate Redis Cache
+  await cacheDel(`site:public:${website.slug}`);
+
   await logActivity({
     userId,
     action: 'WEBSITE_UNPUBLISH',
@@ -302,6 +320,12 @@ export async function unpublishWebsite(websiteId: string, userId: string) {
 }
 
 export async function getPublicWebsiteBySlug(slug: string) {
+  const cacheKey = `site:public:${slug}`;
+  const cached = await cacheGet<any>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const website = await queryOne<{
     id: string;
     name: string;
@@ -350,7 +374,7 @@ export async function getPublicWebsiteBySlug(slug: string) {
     position: number;
   }>('SELECT * FROM sections WHERE website_id = ? ORDER BY position ASC', [website.id]);
 
-  return {
+  const result = {
     id: website.id,
     name: website.name,
     slug: website.slug,
@@ -367,6 +391,11 @@ export async function getPublicWebsiteBySlug(slug: string) {
       content: parseJsonSafe(s.content),
     })),
   };
+
+  // Cache for 10 minutes (600 seconds) in Redis
+  await cacheSet(cacheKey, result, 600);
+
+  return result;
 }
 
 export async function trackPublicWebsiteEvent(slug: string, type: 'view' | 'whatsapp_click') {

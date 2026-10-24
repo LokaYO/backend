@@ -1,9 +1,21 @@
 import crypto from 'node:crypto';
 import { execute, queryAll, queryOne } from '../config/database.js';
+import { cacheDel } from '../config/redis.js';
 async function verifyWebsiteOwnership(websiteId, userId) {
     const owner = await queryOne('SELECT id FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
     if (!owner) {
         throw { status: 403, message: 'Akses ditolak: Website bukan milik Anda' };
+    }
+}
+async function invalidateWebsiteCache(websiteId) {
+    try {
+        const site = await queryOne('SELECT slug FROM websites WHERE id = ?', [websiteId]);
+        if (site?.slug) {
+            await cacheDel(`site:public:${site.slug}`);
+        }
+    }
+    catch {
+        // Fail silently
     }
 }
 export async function addSection(websiteId, userId, type, content) {
@@ -13,6 +25,7 @@ export async function addSection(websiteId, userId, type, content) {
     const sectionId = `sec_${crypto.randomUUID()}`;
     await execute('INSERT INTO sections (id, website_id, type, content, position) VALUES (?, ?, ?, ?, ?)', [sectionId, websiteId, type, JSON.stringify(content || {}), newPosition]);
     await execute('UPDATE websites SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [websiteId]);
+    await invalidateWebsiteCache(websiteId);
     return {
         id: sectionId,
         websiteId,
@@ -25,6 +38,7 @@ export async function updateSection(websiteId, sectionId, userId, content) {
     await verifyWebsiteOwnership(websiteId, userId);
     await execute('UPDATE sections SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND website_id = ?', [JSON.stringify(content), sectionId, websiteId]);
     await execute('UPDATE websites SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [websiteId]);
+    await invalidateWebsiteCache(websiteId);
     return { success: true, message: 'Section berhasil diperbarui' };
 }
 export async function deleteSection(websiteId, sectionId, userId) {
@@ -35,6 +49,7 @@ export async function deleteSection(websiteId, sectionId, userId) {
         await execute('UPDATE sections SET position = ? WHERE id = ?', [i, remaining[i].id]);
     }
     await execute('UPDATE websites SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [websiteId]);
+    await invalidateWebsiteCache(websiteId);
     return { success: true, message: 'Section berhasil dihapus' };
 }
 export async function reorderSections(websiteId, userId, sectionIds) {
@@ -46,5 +61,6 @@ export async function reorderSections(websiteId, userId, sectionIds) {
         await execute('UPDATE sections SET position = ? WHERE id = ? AND website_id = ?', [i, sectionIds[i], websiteId]);
     }
     await execute('UPDATE websites SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [websiteId]);
+    await invalidateWebsiteCache(websiteId);
     return { success: true, message: 'Urutan section berhasil disimpan' };
 }

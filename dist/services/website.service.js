@@ -3,6 +3,7 @@ import { execute, queryAll, queryOne } from '../config/database.js';
 import { getUniqueSlug } from '../utils/slugify.js';
 import { PRESET_TEMPLATES } from '../templates/presetTemplates.js';
 import { logActivity } from './audit.service.js';
+import { cacheGet, cacheSet, cacheDel, cacheDelPattern } from '../config/redis.js';
 function parseJsonSafe(val, fallback = {}) {
     if (!val)
         return fallback;
@@ -159,15 +160,24 @@ export async function updateWebsite(websiteId, userId, data) {
         websiteId,
         userId,
     ]);
+    // Invalidate Redis Cache
+    if (finalSlug) {
+        await cacheDel(`site:public:${finalSlug}`);
+    }
+    await cacheDelPattern(`site:public:*`);
     return { success: true, message: 'Website berhasil diperbarui', slug: finalSlug };
 }
 export async function deleteWebsite(websiteId, userId) {
-    const existing = await queryOne('SELECT id FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
+    const existing = await queryOne('SELECT id, slug FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
     if (!existing) {
         throw { status: 404, message: 'Website tidak ditemukan' };
     }
     await execute('DELETE FROM sections WHERE website_id = ?', [websiteId]);
     await execute('DELETE FROM websites WHERE id = ? AND user_id = ?', [websiteId, userId]);
+    // Invalidate Redis Cache
+    if (existing.slug) {
+        await cacheDel(`site:public:${existing.slug}`);
+    }
     return { success: true, message: 'Website berhasil dihapus' };
 }
 export async function publishWebsite(websiteId, userId) {
@@ -182,6 +192,8 @@ export async function publishWebsite(websiteId, userId) {
         };
     }
     await execute("UPDATE websites SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
+    // Invalidate Redis Cache so latest published version is served
+    await cacheDel(`site:public:${website.slug}`);
     await logActivity({
         userId,
         action: 'WEBSITE_PUBLISH',
@@ -195,6 +207,8 @@ export async function unpublishWebsite(websiteId, userId) {
         throw { status: 404, message: 'Website tidak ditemukan' };
     }
     await execute("UPDATE websites SET status = 'draft', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [websiteId]);
+    // Invalidate Redis Cache
+    await cacheDel(`site:public:${website.slug}`);
     await logActivity({
         userId,
         action: 'WEBSITE_UNPUBLISH',
@@ -203,6 +217,11 @@ export async function unpublishWebsite(websiteId, userId) {
     return { success: true, status: 'draft' };
 }
 export async function getPublicWebsiteBySlug(slug) {
+    const cacheKey = `site:public:${slug}`;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+        return cached;
+    }
     const website = await queryOne(`SELECT w.*, u.plan as owner_plan 
      FROM websites w 
      LEFT JOIN users u ON u.id = w.user_id 
@@ -226,7 +245,7 @@ export async function getPublicWebsiteBySlug(slug) {
         };
     }
     const sections = await queryAll('SELECT * FROM sections WHERE website_id = ? ORDER BY position ASC', [website.id]);
-    return {
+    const result = {
         id: website.id,
         name: website.name,
         slug: website.slug,
@@ -243,6 +262,9 @@ export async function getPublicWebsiteBySlug(slug) {
             content: parseJsonSafe(s.content),
         })),
     };
+    // Cache for 10 minutes (600 seconds) in Redis
+    await cacheSet(cacheKey, result, 600);
+    return result;
 }
 export async function trackPublicWebsiteEvent(slug, type) {
     if (type === 'view') {
