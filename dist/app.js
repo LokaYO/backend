@@ -26,7 +26,7 @@ export function createApp() {
     // Root Welcome Route
     app.get('/', (_req, res) => {
         res.json({
-            message: '🚀 LokalSite Backend API Server is running',
+            message: '🚀 LOKA Backend API Server is running',
             version: '1.0.0',
             docs: '/api/templates',
             health: '/api/health',

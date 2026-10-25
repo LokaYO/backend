@@ -27,6 +27,9 @@ export const ENV = {
   JWT_SECRET: process.env.JWT_SECRET || 'lokalsite_secret_jwt_key_2026_secure',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
+  // App & Public URLs
+  APP_URL: process.env.APP_URL || '',
+
   // Redis Configuration
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,

@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { ENV } from '../config/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +51,8 @@ uploadRouter.post('/', upload.single('image'), (req, res) => {
 
   const host = req.get('host');
   const protocol = req.protocol;
-  const fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const baseUrl = ENV.APP_URL ? ENV.APP_URL.replace(/\/$/, '') : `${protocol}://${host}`;
+  const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
 
   res.json({
     success: true,

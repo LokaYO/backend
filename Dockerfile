@@ -32,6 +32,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built code from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/templates ./dist/templates
+COPY migrations ./migrations
+
+# Create uploads directory for persistent storage
+RUN mkdir -p /app/public/uploads
 
 EXPOSE 5000
 

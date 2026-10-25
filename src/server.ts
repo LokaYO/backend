@@ -12,7 +12,7 @@ async function bootstrap() {
 
     // 3. Listen on configured port
     app.listen(ENV.PORT, '0.0.0.0', () => {
-      console.log(`🚀 LokalSite Server running on http://localhost:${ENV.PORT}`);
+      console.log(`🚀 LOKA Server running on http://localhost:${ENV.PORT}`);
       console.log(`📡 Health Check: http://localhost:${ENV.PORT}/api/health`);
       console.log(`📑 API Docs / Templates: http://localhost:${ENV.PORT}/api/templates`);
     });

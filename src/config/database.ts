@@ -89,19 +89,37 @@ export async function initSchema(client: pg.PoolClient): Promise<void> {
     );
   `);
 
-  // Seed default demo, admin, and support users
+  // Safely seed or update default demo, admin, and support users
   const defaultHash = hashPassword('password123');
-  await client.query(
-    `INSERT INTO users (id, name, email, password_hash, role, last_login_at)
-     VALUES 
-       ('usr_admin_master', 'Administrator LOKA', 'admin@lokalsite.id', $1, 'admin', CURRENT_TIMESTAMP),
-       ('usr_support_01', 'Support Team LOKA', 'support@lokalsite.id', $1, 'support', CURRENT_TIMESTAMP),
-       ('usr_demo_12345', 'Blackiee - Pemilik Usaha', 'demo@lokalsite.id', $1, 'user', CURRENT_TIMESTAMP)
-     ON CONFLICT (email) DO UPDATE SET 
-       name = EXCLUDED.name,
-       role = EXCLUDED.role;`,
-    [defaultHash]
-  );
+  try {
+    // 1. Update old @lokalsite.id seed emails to @loka.id if present
+    await client.query(`
+      UPDATE users SET email = 'admin@loka.id' WHERE id = 'usr_admin_master' AND email = 'admin@lokalsite.id';
+      UPDATE users SET email = 'support@loka.id' WHERE id = 'usr_support_01' AND email = 'support@lokalsite.id';
+      UPDATE users SET email = 'demo@loka.id' WHERE id = 'usr_demo_12345' AND email = 'demo@lokalsite.id';
+    `);
+
+    // 2. Insert or update default users matching PRIMARY KEY (id)
+    const seedUsers = [
+      { id: 'usr_admin_master', name: 'Administrator LOKA', email: 'admin@loka.id', role: 'admin' },
+      { id: 'usr_support_01', name: 'Support Team LOKA', email: 'support@loka.id', role: 'support' },
+      { id: 'usr_demo_12345', name: 'Blackiee - Pemilik Usaha', email: 'demo@loka.id', role: 'user' },
+    ];
+
+    for (const u of seedUsers) {
+      await client.query(
+        `INSERT INTO users (id, name, email, password_hash, role, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET 
+           name = EXCLUDED.name,
+           email = EXCLUDED.email,
+           role = EXCLUDED.role;`,
+        [u.id, u.name, u.email, defaultHash, u.role]
+      );
+    }
+  } catch (seedErr: any) {
+    console.warn('⚠️ [Database Seed Notice]:', seedErr.message);
+  }
 
   // Seed initial starter website if empty
   const siteRes = await client.query('SELECT count(*) as count FROM websites');
