@@ -1,39 +1,69 @@
-import express from 'express';
-import cors from 'cors';
-import morgan from 'morgan';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { ENV } from './config/env.js';
-import apiRouter from './routes/index.js';
-import { errorHandler } from './middlewares/error.middleware.js';
-import { globalApiLimiter } from './middlewares/rateLimit.middleware.js';
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ENV } from "./config/env.js";
+import apiRouter from "./routes/index.js";
+import { errorHandler } from "./middlewares/error.middleware.js";
+import { globalApiLimiter } from "./middlewares/rateLimit.middleware.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadDir = path.resolve(__dirname, '../public/uploads');
+const uploadDir = path.resolve(__dirname, "../public/uploads");
 export function createApp() {
     const app = express();
-    // Core Middlewares
+    // Core Middlewares (Full Dynamic Wildcard CORS untuk seluruh subdomain toko/merchant)
     app.use(cors({
-        origin: ENV.CORS_ORIGIN,
+        origin: (requestOrigin, callback) => {
+            // Request internal/curl/mobile tanpa header origin selalu diizinkan
+            if (!requestOrigin)
+                return callback(null, true);
+            // Jika diset '*' di env
+            if (ENV.CORS_ORIGIN.includes("*")) {
+                return callback(null, true);
+            }
+            // Otomatis izinkan seluruh subdomain dinamis (*.ruuby.my.id, *.loka.id, Firebase, dll)
+            const isAllowedOrigin = requestOrigin.includes("ruuby.my.id") ||
+                requestOrigin.includes("ruubia.my.id") ||
+                requestOrigin.includes("loka.id") ||
+                requestOrigin.endsWith(".web.app") ||
+                requestOrigin.endsWith(".firebaseapp.com") ||
+                requestOrigin.includes("localhost") ||
+                requestOrigin.includes("127.0.0.1") ||
+                ENV.CORS_ORIGIN.some((allowed) => {
+                    try {
+                        const allowedHost = new URL(allowed).hostname;
+                        const reqHost = new URL(requestOrigin).hostname;
+                        return reqHost === allowedHost || reqHost.endsWith(`.${allowedHost}`);
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+            if (isAllowedOrigin) {
+                return callback(null, true);
+            }
+            return callback(null, false);
+        },
         credentials: true,
     }));
-    app.use(morgan('dev'));
-    app.use(express.json({ limit: '10mb' }));
+    app.use(morgan("dev"));
+    app.use(express.json({ limit: "10mb" }));
     // Static files for uploads (Direct Image Serving)
-    app.use('/uploads', express.static(uploadDir));
+    app.use("/uploads", express.static(uploadDir));
     // Global Rate Limiting for all API Endpoints
-    app.use('/api', globalApiLimiter);
+    app.use("/api", globalApiLimiter);
     // Root Welcome Route
-    app.get('/', (_req, res) => {
+    app.get("/", (_req, res) => {
         res.json({
-            message: '🚀 LOKA Backend API Server is running',
-            version: '1.0.0',
-            docs: '/api/templates',
-            health: '/api/health',
+            message: "🚀 LOKA Backend API Server is running",
+            version: "1.0.0",
+            docs: "/api/templates",
+            health: "/api/health",
         });
     });
     // Mount Modular API Routes
-    app.use('/api', apiRouter);
+    app.use("/api", apiRouter);
     // Global Error Handler
     app.use(errorHandler);
     return app;

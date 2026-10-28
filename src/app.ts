@@ -15,10 +15,43 @@ const uploadDir = path.resolve(__dirname, "../public/uploads");
 export function createApp() {
   const app = express();
 
-  // Core Middlewares
+  // Core Middlewares (Full Dynamic Wildcard CORS untuk seluruh subdomain toko/merchant)
   app.use(
     cors({
-      origin: ENV.CORS_ORIGIN,
+      origin: (requestOrigin, callback) => {
+        // Request internal/curl/mobile tanpa header origin selalu diizinkan
+        if (!requestOrigin) return callback(null, true);
+
+        // Jika diset '*' di env
+        if (ENV.CORS_ORIGIN.includes("*")) {
+          return callback(null, true);
+        }
+
+        // Otomatis izinkan seluruh subdomain dinamis (*.ruuby.my.id, *.loka.id, Firebase, dll)
+        const isAllowedOrigin =
+          requestOrigin.includes("ruuby.my.id") ||
+          requestOrigin.includes("ruubia.my.id") ||
+          requestOrigin.includes("loka.id") ||
+          requestOrigin.endsWith(".web.app") ||
+          requestOrigin.endsWith(".firebaseapp.com") ||
+          requestOrigin.includes("localhost") ||
+          requestOrigin.includes("127.0.0.1") ||
+          ENV.CORS_ORIGIN.some((allowed) => {
+            try {
+              const allowedHost = new URL(allowed).hostname;
+              const reqHost = new URL(requestOrigin).hostname;
+              return reqHost === allowedHost || reqHost.endsWith(`.${allowedHost}`);
+            } catch {
+              return false;
+            }
+          });
+
+        if (isAllowedOrigin) {
+          return callback(null, true);
+        }
+
+        return callback(null, false);
+      },
       credentials: true,
     }),
   );
