@@ -1,6 +1,7 @@
 import { rateLimit, MemoryStore } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { redisClient, isRedisReady } from '../config/redis.js';
+import { ENV } from '../config/env.js';
 /**
  * Smart Adaptive Store
  * - Gunakan RedisStore jika Redis terhubung dan siap (mode Production / Docker).
@@ -98,11 +99,11 @@ class AdaptiveRateLimitStore {
 }
 /**
  * 1. Global API Rate Limiter
- * Membatasi maksimal 300 request per 15 menit per IP untuk melindungi seluruh API dari flooding/DDoS.
+ * Melindungi API dari flooding/DDoS.
  */
 export const globalApiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 menit
-    limit: 300,
+    limit: ENV.NODE_ENV === 'production' ? 500 : 5000,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     passOnStoreError: true,
@@ -114,34 +115,35 @@ export const globalApiLimiter = rateLimit({
 });
 /**
  * 2. Auth & Login Rate Limiter (Brute-Force Protection)
- * Maksimal 10 percobaan login / register per 15 menit per IP.
+ * - Hanya menghitung request yang GAGAL (skipSuccessfulRequests: true).
+ * - Di mode development, batas diberikan 100x percobaan agar leluasa testing.
  */
 export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 menit
-    limit: 10,
+    windowMs: ENV.NODE_ENV === 'production' ? 15 * 60 * 1000 : 1 * 60 * 1000,
+    limit: ENV.NODE_ENV === 'production' ? 15 : 100,
+    skipSuccessfulRequests: true, // Login berhasil TIDAK dihitung sebagai limit
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     passOnStoreError: true,
     store: new AdaptiveRateLimitStore('auth'),
     message: {
         success: false,
-        message: 'Terlalu banyak percobaan login/registrasi gagal. Demi keamanan akun, coba lagi setelah 15 menit.',
+        message: 'Terlalu banyak percobaan login/registrasi gagal. Demi keamanan akun, coba lagi setelah beberapa saat.',
     },
 });
 /**
  * 3. AI Generation Rate Limiter (Gemini Quota Protection)
- * Maksimal 6 generasi website dengan Gemini AI per 10 menit per IP.
  */
 export const aiLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 menit
-    limit: 6,
+    limit: ENV.NODE_ENV === 'production' ? 10 : 100,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     passOnStoreError: true,
     store: new AdaptiveRateLimitStore('ai'),
     message: {
         success: false,
-        message: 'Batas pembuatan website dengan AI tercapai (maksimal 6x per 10 menit). Silakan istirahat sejenak.',
+        message: 'Batas pembuatan website dengan AI tercapai. Silakan istirahat sejenak.',
     },
 });
 /**
