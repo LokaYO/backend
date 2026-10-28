@@ -44,10 +44,16 @@ export async function initSchema(client) {
       email VARCHAR(255) UNIQUE NOT NULL,
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(20) NOT NULL DEFAULT 'user',
+      plan VARCHAR(20) NOT NULL DEFAULT 'free',
+      subscription_until TIMESTAMPTZ NULL,
       last_login_at TIMESTAMPTZ NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Ensure columns exist if table was created in older schema
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'free';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_until TIMESTAMPTZ NULL;
 
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -67,9 +73,16 @@ export async function initSchema(client) {
       template VARCHAR(100) NULL,
       business_info JSONB NOT NULL DEFAULT '{}'::jsonb,
       theme JSONB NOT NULL DEFAULT '{}'::jsonb,
+      views_count INTEGER NOT NULL DEFAULT 0,
+      whatsapp_clicks_count INTEGER NOT NULL DEFAULT 0,
+      suspend_reason TEXT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE websites ADD COLUMN IF NOT EXISTS views_count INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE websites ADD COLUMN IF NOT EXISTS whatsapp_clicks_count INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE websites ADD COLUMN IF NOT EXISTS suspend_reason TEXT NULL;
 
     CREATE TABLE IF NOT EXISTS sections (
       id VARCHAR(64) PRIMARY KEY,
@@ -77,6 +90,53 @@ export async function initSchema(client) {
       type VARCHAR(50) NOT NULL,
       content JSONB NOT NULL DEFAULT '{}'::jsonb,
       position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS leads (
+      id VARCHAR(64) PRIMARY KEY,
+      website_id VARCHAR(64) NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+      name VARCHAR(100) NOT NULL,
+      phone VARCHAR(50) NOT NULL,
+      message TEXT NOT NULL,
+      service_interest VARCHAR(100),
+      status VARCHAR(20) NOT NULL DEFAULT 'unread',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS system_announcements (
+      id VARCHAR(64) PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      type VARCHAR(30) NOT NULL DEFAULT 'info',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_by VARCHAR(64) NULL REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(64) NULL REFERENCES users(id) ON DELETE SET NULL,
+      action VARCHAR(100) NOT NULL,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ip_address VARCHAR(100) NULL,
+      user_agent TEXT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      id VARCHAR(64) PRIMARY KEY,
+      order_id VARCHAR(100) UNIQUE NOT NULL,
+      user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      plan_type VARCHAR(50) NOT NULL,
+      amount INTEGER NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'pending',
+      payment_type VARCHAR(50) NULL,
+      snap_token TEXT NULL,
+      snap_redirect_url TEXT NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
