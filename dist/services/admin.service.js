@@ -1,5 +1,6 @@
 import { execute, queryAll, queryOne } from '../config/database.js';
 import { logActivity } from './audit.service.js';
+import { cacheDel, cacheDelPattern } from '../config/redis.js';
 export async function getAllUsersForMonitoring() {
     const users = await queryAll(`SELECT 
       u.id, 
@@ -128,6 +129,13 @@ export async function deleteUser(userId) {
         throw { status: 404, message: 'User tidak ditemukan' };
     }
     await execute('DELETE FROM users WHERE id = $1', [userId]);
+    // Bersihkan cache publik website jika ada website yang terhapus
+    try {
+        await cacheDelPattern('site:public:*');
+    }
+    catch (cacheErr) {
+        console.error('Failed to clear public cache on deleteUser:', cacheErr);
+    }
     return { success: true, message: `User "${existing.name}" berhasil dihapus beserta seluruh websitenya` };
 }
 export async function getPlatformStats() {
@@ -197,6 +205,14 @@ export async function suspendWebsite(websiteId, reason, adminId) {
     await execute(`UPDATE websites 
      SET status = 'suspended', suspend_reason = $1, updated_at = CURRENT_TIMESTAMP 
      WHERE id = $2`, [finalReason, websiteId]);
+    // Invalidate Redis cache INSTAN agar akses publik langsung terblokir detik itu juga
+    try {
+        await cacheDel(`site:public:${existing.slug}`);
+        await cacheDelPattern(`site:public:${existing.slug}*`);
+    }
+    catch (cacheErr) {
+        console.error('Failed to invalidate Redis cache on suspendWebsite:', cacheErr);
+    }
     await logActivity({
         userId: adminId,
         action: 'WEBSITE_SUSPEND',
@@ -222,6 +238,14 @@ export async function unsuspendWebsite(websiteId, adminId) {
     await execute(`UPDATE websites 
      SET status = 'draft', suspend_reason = NULL, updated_at = CURRENT_TIMESTAMP 
      WHERE id = $1`, [websiteId]);
+    // Invalidate Redis cache INSTAN
+    try {
+        await cacheDel(`site:public:${existing.slug}`);
+        await cacheDelPattern(`site:public:${existing.slug}*`);
+    }
+    catch (cacheErr) {
+        console.error('Failed to invalidate Redis cache on unsuspendWebsite:', cacheErr);
+    }
     await logActivity({
         userId: adminId,
         action: 'WEBSITE_UNSUSPEND',

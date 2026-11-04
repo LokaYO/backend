@@ -1,5 +1,6 @@
 import { execute, queryAll, queryOne } from '../config/database.js';
 import { logActivity } from './audit.service.js';
+import { cacheDel, cacheDelPattern } from '../config/redis.js';
 
 export async function getAllUsersForMonitoring() {
   const users = await queryAll<{
@@ -208,6 +209,14 @@ export async function deleteUser(userId: string) {
   }
 
   await execute('DELETE FROM users WHERE id = $1', [userId]);
+
+  // Bersihkan cache publik website jika ada website yang terhapus
+  try {
+    await cacheDelPattern('site:public:*');
+  } catch (cacheErr) {
+    console.error('Failed to clear public cache on deleteUser:', cacheErr);
+  }
+
   return { success: true, message: `User "${existing.name}" berhasil dihapus beserta seluruh websitenya` };
 }
 
@@ -317,6 +326,14 @@ export async function suspendWebsite(websiteId: string, reason: string, adminId:
     [finalReason, websiteId]
   );
 
+  // Invalidate Redis cache INSTAN agar akses publik langsung terblokir detik itu juga
+  try {
+    await cacheDel(`site:public:${existing.slug}`);
+    await cacheDelPattern(`site:public:${existing.slug}*`);
+  } catch (cacheErr) {
+    console.error('Failed to invalidate Redis cache on suspendWebsite:', cacheErr);
+  }
+
   await logActivity({
     userId: adminId,
     action: 'WEBSITE_SUSPEND',
@@ -352,6 +369,14 @@ export async function unsuspendWebsite(websiteId: string, adminId: string) {
      WHERE id = $1`,
     [websiteId]
   );
+
+  // Invalidate Redis cache INSTAN
+  try {
+    await cacheDel(`site:public:${existing.slug}`);
+    await cacheDelPattern(`site:public:${existing.slug}*`);
+  } catch (cacheErr) {
+    console.error('Failed to invalidate Redis cache on unsuspendWebsite:', cacheErr);
+  }
 
   await logActivity({
     userId: adminId,

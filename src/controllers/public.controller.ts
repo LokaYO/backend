@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import * as websiteService from '../services/website.service.js';
 
 export async function getPublicSite(req: Request, res: Response): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const website = await websiteService.getPublicWebsiteBySlug(req.params.slug);
   res.json({ website });
 }
@@ -12,6 +15,9 @@ export async function getPublicSite(req: Request, res: Response): Promise<void> 
  * Berguna saat DNS registrar menggunakan wildcard CNAME / A Record: *.lokalsite.id
  */
 export async function resolvePublicSite(req: Request, res: Response): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const hostParam =
     (req.query.host as string) ||
     req.headers['x-forwarded-host'] ||
