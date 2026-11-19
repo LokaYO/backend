@@ -63,3 +63,64 @@ export async function submitLead(req, res) {
     const result = await websiteService.createLead(slug, { name, phone, message, serviceInterest });
     res.json(result);
 }
+function escapeHtml(str) {
+    return (str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+/**
+ * Server-Side OpenGraph HTML Renderer untuk Social Media Crawlers (WhatsApp, Facebook, Twitter, Telegram, dll)
+ * Mengembalikan HTML murni dengan meta tags lengkap yang langsung dibaca oleh bot crawler,
+ * dan otomatis mengalihkan browser pengguna ke URL landing page frontend publik.
+ */
+export async function renderSharePage(req, res) {
+    const { slug } = req.params;
+    const targetSiteUrl = `https://ruuby.my.id/sites/${slug}`;
+    try {
+        const website = await websiteService.getPublicWebsiteBySlug(slug);
+        if (!website) {
+            res.redirect(targetSiteUrl);
+            return;
+        }
+        const info = (website.businessInfo || {});
+        const title = info.seoTitle || info.name || website.name || 'Website Resmi';
+        const description = info.seoDescription ||
+            info.tagline ||
+            info.description ||
+            'Katalog lengkap, galeri, dan pemesanan WhatsApp langsung.';
+        const imageUrl = info.ogImageUrl || info.logo || '';
+        const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeHtml(description)}" />
+  <meta property="og:title" content="${escapeHtml(title)}" />
+  <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:url" content="${targetSiteUrl}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${escapeHtml(info.name || website.name || 'LOKA')}" />
+  ${imageUrl ? `<meta property="og:image" content="${escapeHtml(imageUrl)}" />\n  <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />` : ''}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(title)}" />
+  <meta name="twitter:description" content="${escapeHtml(description)}" />
+  ${imageUrl ? `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />` : ''}
+  <meta http-equiv="refresh" content="0;url=${targetSiteUrl}" />
+</head>
+<body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+  <p>Mengalihkan ke <a href="${targetSiteUrl}">${escapeHtml(title)}</a>...</p>
+  <script>window.location.replace("${targetSiteUrl}");</script>
+</body>
+</html>`;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=60');
+        res.send(html);
+    }
+    catch (err) {
+        res.redirect(targetSiteUrl);
+    }
+}

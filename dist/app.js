@@ -5,13 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENV } from "./config/env.js";
 import apiRouter from "./routes/index.js";
-import { errorHandler } from "./middlewares/error.middleware.js";
+import { errorHandler, asyncHandler } from "./middlewares/error.middleware.js";
 import { globalApiLimiter } from "./middlewares/rateLimit.middleware.js";
+import * as publicController from "./controllers/public.controller.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadDir = path.resolve(__dirname, "../public/uploads");
 export function createApp() {
     const app = express();
+    // Trust proxy for reverse proxies (Nginx / Cloudflare) to ensure correct req.protocol and secure URLs
+    app.set("trust proxy", 1);
     // Core Middlewares (Full Dynamic Wildcard CORS untuk seluruh subdomain toko/merchant)
     app.use(cors({
         origin: (requestOrigin, callback) => {
@@ -53,6 +56,9 @@ export function createApp() {
     app.use("/uploads", express.static(uploadDir));
     // Global Rate Limiting for all API Endpoints
     app.use("/api", globalApiLimiter);
+    // Direct Share Link & Social Crawler handler for /s/:slug and /sites/:slug
+    app.get("/s/:slug", asyncHandler(publicController.renderSharePage));
+    app.get("/sites/:slug/share", asyncHandler(publicController.renderSharePage));
     // Root Welcome Route
     app.get("/", (_req, res) => {
         res.json({

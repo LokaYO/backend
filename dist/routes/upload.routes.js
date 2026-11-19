@@ -43,7 +43,8 @@ uploadRouter.post('/', upload.single('image'), (req, res) => {
         return;
     }
     const host = req.get('host');
-    const protocol = req.protocol;
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = typeof forwardedProto === 'string' ? forwardedProto.split(',')[0].trim() : req.protocol;
     const baseUrl = ENV.APP_URL ? ENV.APP_URL.replace(/\/$/, '') : `${protocol}://${host}`;
     const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
     res.json({

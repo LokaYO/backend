@@ -5,6 +5,8 @@ import * as publicController from '../controllers/public.controller.js';
 const router = Router();
 // 1. Resolve melalui path slug: /api/public/sites/:slug
 router.get('/sites/:slug', asyncHandler(publicController.getPublicSite));
+// 1b. Server-Side OpenGraph Share HTML Renderer untuk Crawlers & Social Share: /api/public/sites/:slug/share
+router.get('/sites/:slug/share', asyncHandler(publicController.renderSharePage));
 // 2. Track event analitik publik (view & whatsapp_click)
 router.post('/sites/:slug/track', asyncHandler(publicController.trackPublicEvent));
 // 3. Form kontak / Buku Tamu Publik (Dilindungi Rate Limit Anti-Spam)
